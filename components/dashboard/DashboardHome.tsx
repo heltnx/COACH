@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { WeeklyProgram, UserProfile, HistoryItem } from '../../types';
+import { WeeklyProgram, UserProfile, HistoryItem, Activity } from '../../types';
 import Card from '../ui/Card';
 import SessionDetail from '../program/SessionDetail';
 import { CheckCircleIcon } from '../ui/Icons';
@@ -10,17 +9,19 @@ interface DashboardHomeProps {
   program: WeeklyProgram;
   history: HistoryItem[];
   onSessionComplete: (sessionTitle: string) => void;
+  onUpdateActivity: (day: string, activityId: string, newActivity: Activity) => void;
 }
 
-const DashboardHome: React.FC<DashboardHomeProps> = ({ program, onSessionComplete, history }) => {
+const DashboardHome: React.FC<DashboardHomeProps> = ({ profile, program, onSessionComplete, history, onUpdateActivity }) => {
   const [showSessionDetail, setShowSessionDetail] = useState(false);
 
   const dayIndex = new Date().getDay(); // Sunday = 0, Monday = 1...
-  const todayName = new Intl.DateTimeFormat('fr-FR', { weekday: 'long' }).format(new Date());
   
   // Adjust index because my week starts on Monday in the program
   const adjustedIndex = dayIndex === 0 ? 6 : dayIndex - 1;
   const todaysPlan = program.weeklySchedule[adjustedIndex];
+  const todayName = todaysPlan.day;
+
 
   const isCompleted = todaysPlan?.session && history.some(item => {
     const itemDate = new Date(item.date);
@@ -33,10 +34,13 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ program, onSessionComplet
 
   if (showSessionDetail && todaysPlan?.session) {
     return <SessionDetail 
+              day={todayName}
               session={todaysPlan.session} 
               onBack={() => setShowSessionDetail(false)} 
               onComplete={onSessionComplete}
               isCompleted={isCompleted}
+              profile={profile}
+              onUpdateActivity={onUpdateActivity}
             />;
   }
   

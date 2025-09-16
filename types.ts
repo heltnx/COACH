@@ -1,4 +1,3 @@
-
 export interface UserProfile {
   name: string;
   age: number;
@@ -16,11 +15,13 @@ export enum SessionType {
 }
 
 export interface Activity {
+  id: string; // Unique identifier for each activity
   name: string;
   description: string;
   duration?: string;
   reps?: string;
   sets?: string;
+  videoSearchQuery?: string;
 }
 
 export interface Session {

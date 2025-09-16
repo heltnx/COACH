@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
-import { UserProfile, WeeklyProgram, HistoryItem } from './types';
+import { UserProfile, WeeklyProgram, HistoryItem, Activity } from './types';
 import { generateWeeklyProgram } from './services/geminiService';
 import Onboarding from './components/Onboarding';
 import Dashboard from './components/Dashboard';
@@ -37,6 +36,15 @@ const App: React.FC = () => {
     setError(null);
     try {
       const newProgram = await generateWeeklyProgram(newProfile);
+      // Add unique IDs to each activity
+      newProgram.weeklySchedule.forEach(plan => {
+        if (plan.session) {
+          plan.session.activities.forEach(activity => {
+            activity.id = crypto.randomUUID();
+          });
+        }
+      });
+      
       setProfile(newProfile);
       setProgram(newProgram);
       setHistory([]); // Reset history for new profile
@@ -75,6 +83,31 @@ const App: React.FC = () => {
     });
   }, []);
 
+  const handleUpdateActivity = useCallback((day: string, activityId: string, newActivity: Activity) => {
+    if (!program) return;
+
+    const updatedSchedule = program.weeklySchedule.map(dailyPlan => {
+      if (dailyPlan.day === day && dailyPlan.session) {
+        const updatedActivities = dailyPlan.session.activities.map(act => 
+          act.id === activityId ? { ...newActivity, id: act.id } : act
+        );
+        return {
+          ...dailyPlan,
+          session: {
+            ...dailyPlan.session,
+            activities: updatedActivities,
+          },
+        };
+      }
+      return dailyPlan;
+    });
+
+    const updatedProgram = { ...program, weeklySchedule: updatedSchedule };
+    setProgram(updatedProgram);
+    localStorage.setItem('userProgram', JSON.stringify(updatedProgram));
+  }, [program]);
+
+
   if (isLoading) {
     return <Loader message="Chargement de votre coach personnel..." />;
   }
@@ -108,6 +141,7 @@ const App: React.FC = () => {
             history={history}
             onSessionComplete={handleSessionComplete}
             onReset={handleReset} 
+            onUpdateActivity={handleUpdateActivity}
           />;
 };
 

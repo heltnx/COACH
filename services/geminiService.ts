@@ -1,141 +1,163 @@
-
+// Implementing the Gemini service to generate a weekly program.
 import { GoogleGenAI, Type } from "@google/genai";
-import { UserProfile, WeeklyProgram } from '../types';
-
-if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable not set");
-}
+import { UserProfile, WeeklyProgram, Activity, SessionType } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-const programSchema = {
-  type: Type.OBJECT,
-  properties: {
-    motivationalMessage: {
-      type: Type.STRING,
-      description: "Un message de motivation court et positif pour la semaine."
-    },
-    weeklySchedule: {
-      type: Type.ARRAY,
-      description: "Le programme d'activités pour les 7 jours de la semaine, commençant par Lundi.",
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          day: {
-            type: Type.STRING,
-            description: "Le jour de la semaine (ex: 'Lundi', 'Mardi').",
-          },
-          session: {
-            type: Type.OBJECT,
-            nullable: true,
-            description: "La session d'activité prévue pour ce jour. Null si c'est un jour de repos.",
-            properties: {
-              type: {
-                type: Type.STRING,
-                enum: ['physique', 'ludique'],
-                description: "Le type de session: 'physique' ou 'ludique'.",
-              },
-              title: {
-                type: Type.STRING,
-                description: "Un titre court et motivant pour la session.",
-              },
-              description: {
-                type: Type.STRING,
-                description: "Une brève description de l'objectif de la session.",
-              },
-              activities: {
-                type: Type.ARRAY,
-                description: "La liste des activités ou exercices à faire.",
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    name: {
-                      type: Type.STRING,
-                      description: "Le nom de l'activité ou de l'exercice.",
-                    },
-                    description: {
-                      type: Type.STRING,
-                      description: "Les instructions claires et détaillées pour réaliser l'activité. Pour les exercices physiques, inclure des conseils de sécurité.",
-                    },
-                    duration: {
-                      type: Type.STRING,
-                      description: "La durée de l'activité (ex: '15 minutes'). Optionnel."
-                    },
-                    reps: {
-                      type: Type.STRING,
-                      description: "Le nombre de répétitions. (ex: '10-12 répétitions'). Optionnel."
-                    },
-                    sets: {
-                      type: Type.STRING,
-                      description: "Le nombre de séries. (ex: '3 séries'). Optionnel."
-                    },
-                  },
-                  required: ["name", "description"]
-                },
-              },
-            },
-            required: ["type", "title", "description", "activities"]
-          },
-        },
-        required: ["day", "session"]
-      },
-    },
-  },
-  required: ["motivationalMessage", "weeklySchedule"]
-};
-
-
-const createPrompt = (profile: UserProfile): string => {
+const generatePrompt = (profile: UserProfile): string => {
   return `
-    Crée un programme de bien-être hebdomadaire personnalisé pour un senior.
-    Voici les informations de l'utilisateur :
+    Crée un programme d'activités hebdomadaire personnalisé pour une personne âgée, en te basant sur le profil suivant.
+    Le programme doit être équilibré, sûr, et motivant, avec une alternance de jours d'activité et de jours de repos.
+    Il doit inclure des activités physiques adaptées et des activités ludiques pour la stimulation mentale.
+
+    Profil de l'utilisateur :
     - Nom : ${profile.name}
     - Âge : ${profile.age} ans
-    - Niveau de mobilité : ${profile.mobility}
-    - Handicaps/Conditions spécifiques : ${profile.disabilities.join(', ') || 'Aucun'}
-    - Opérations passées pertinentes : ${profile.surgeries || 'Aucune'}
-    - Objectifs principaux : ${profile.goals.join(', ')}
-    - Équipement disponible : ${profile.equipment.join(', ') || 'Aucun équipement spécifique'}
+    - Mobilité : ${profile.mobility}
+    - Conditions particulières / Handicaps : ${profile.disabilities.join(', ') || 'Aucun'}
+    - Opérations récentes : ${profile.surgeries || 'Aucune'}
+    - Objectifs : ${profile.goals.join(', ')}
+    - Équipement disponible : ${profile.equipment.join(', ') || 'Aucun'}
     - Loisirs préférés : ${profile.hobbies.join(', ')}
 
-    Instructions pour la génération du programme :
-    1.  Le programme doit couvrir 7 jours, de Lundi à Dimanche.
-    2.  Crée 3 jours de session au total. Les autres jours sont des jours de repos (session: null).
-    3.  Alternez entre les jours d'activité et les jours de repos. Par exemple : Lundi (activité), Mardi (repos), Mercredi (activité), etc.
-    4.  Incluez un mélange de séances 'physique' et 'ludique' (au moins une de chaque).
-    5.  Les exercices physiques doivent être sûrs, adaptés à l'âge, à la mobilité, et aux conditions de l'utilisateur. Privilégiez des exercices à faible impact. Si l'utilisateur a du matériel, proposez des exercices qui l'utilisent.
-    6.  Les instructions pour chaque exercice doivent être très claires, simples et détaillées, avec des conseils de sécurité.
-    7.  Les activités ludiques doivent être basées sur les loisirs de l'utilisateur.
-    8.  Le ton doit être encourageant, positif et bienveillant.
-    9.  Génère un message de motivation unique pour la semaine.
-    10. La réponse DOIT être uniquement au format JSON et respecter le schéma fourni. Ne pas inclure de texte avant ou après le JSON.
+    Instructions importantes pour la structure de la réponse JSON :
+    - Le programme doit couvrir 7 jours, en commençant par Lundi.
+    - Pour chaque jour, spécifier le jour de la semaine ("Lundi", "Mardi", etc.).
+    - Pour les jours d'activité, fournir un objet "session".
+    - Pour les jours de repos, la valeur de la clé "session" DOIT être null.
+    - Inclure un "motivationalMessage" général et bienveillant pour la semaine.
+
+    Détails de l'objet "session" (quand il n'est pas null):
+    - "type": "physique" ou "ludique".
+    - "title": un titre court et motivant.
+    - "description": une brève description de la session.
+    - "activities": une liste d'activités, chacune avec :
+        - "name": nom de l'activité.
+        - "description": instructions détaillées et conseils de sécurité.
+        - "duration" (ex: "10 minutes") OU "reps" et "sets" (ex: "10 répétitions", "3 séries").
+        - "videoSearchQuery": une suggestion de terme de recherche simple pour trouver une vidéo de démonstration sur YouTube (ex: "exercices sur chaise pour seniors").
+
+    Assure-toi que les activités proposées sont cohérentes avec le profil de l'utilisateur. Par exemple, pour une personne 'Principalement sédentaire', privilégie les exercices sur chaise.
+    Le ton doit être encourageant et positif.
+    Génère le programme complet en respectant scrupuleusement le format JSON demandé.
   `;
 };
 
+const weeklyProgramSchema = {
+    type: Type.OBJECT,
+    properties: {
+        weeklySchedule: {
+            type: Type.ARRAY,
+            description: "Programme de la semaine du Lundi au Dimanche.",
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    day: { type: Type.STRING, description: "Jour de la semaine (ex: Lundi)" },
+                    session: {
+                        type: Type.OBJECT,
+                        description: "Détails de la session pour la journée, ou null si c'est un jour de repos.",
+                        properties: {
+                            type: { type: Type.STRING, enum: ['physique', 'ludique'], description: "Type de session" },
+                            title: { type: Type.STRING, description: "Titre de la session" },
+                            description: { type: Type.STRING, description: "Description courte de la session" },
+                            activities: {
+                                type: Type.ARRAY,
+                                items: {
+                                    type: Type.OBJECT,
+                                    properties: {
+                                        name: { type: Type.STRING },
+                                        description: { type: Type.STRING },
+                                        duration: { type: Type.STRING, description: "Durée de l'activité (optionnel)" },
+                                        reps: { type: Type.STRING, description: "Nombre de répétitions (optionnel)" },
+                                        sets: { type: Type.STRING, description: "Nombre de séries (optionnel)" },
+                                        videoSearchQuery: { type: Type.STRING, description: "Suggestion de recherche vidéo" },
+                                    },
+                                    required: ['name', 'description']
+                                }
+                            }
+                        },
+                        required: ['type', 'title', 'description', 'activities']
+                    }
+                },
+                required: ['day', 'session']
+            }
+        },
+        motivationalMessage: {
+            type: Type.STRING,
+            description: "Un message de motivation pour la semaine."
+        }
+    },
+    required: ['weeklySchedule', 'motivationalMessage']
+};
+
 export const generateWeeklyProgram = async (profile: UserProfile): Promise<WeeklyProgram> => {
-  const prompt = createPrompt(profile);
+  const prompt = generatePrompt(profile);
   
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: programSchema,
-      },
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: weeklyProgramSchema,
+        },
     });
 
     const jsonText = response.text.trim();
-    const programData = JSON.parse(jsonText);
-
-    if (!programData.weeklySchedule || programData.weeklySchedule.length !== 7) {
-        throw new Error("Le programme généré n'est pas valide ou ne contient pas 7 jours.");
-    }
-    
-    return programData as WeeklyProgram;
+    return JSON.parse(jsonText) as WeeklyProgram;
 
   } catch (error) {
-    console.error("Error generating program with Gemini:", error);
-    throw new Error("Failed to generate a valid weekly program from the AI.");
+    console.error("Error calling Gemini API for weekly program:", error);
+    throw new Error("Failed to generate weekly program from Gemini API.");
   }
+};
+
+const singleActivitySchema = {
+    type: Type.OBJECT,
+    properties: {
+        name: { type: Type.STRING },
+        description: { type: Type.STRING },
+        duration: { type: Type.STRING, description: "Durée de l'activité (optionnel)" },
+        reps: { type: Type.STRING, description: "Nombre de répétitions (optionnel)" },
+        sets: { type: Type.STRING, description: "Nombre de séries (optionnel)" },
+        videoSearchQuery: { type: Type.STRING, description: "Suggestion de recherche vidéo" },
+    },
+    required: ['name', 'description']
+};
+
+
+export const generateReplacementActivity = async (profile: UserProfile, activityToReplace: Activity, sessionType: SessionType): Promise<Omit<Activity, 'id'>> => {
+    const prompt = `
+        Génère une seule activité de remplacement pour un senior dont le profil est le suivant:
+        - Âge: ${profile.age}
+        - Mobilité: ${profile.mobility}
+        - Conditions: ${profile.disabilities.join(', ') || 'Aucune'}
+        - Objectifs: ${profile.goals.join(', ')}
+
+        L'activité à remplacer est:
+        - Nom: ${activityToReplace.name}
+        - Description: ${activityToReplace.description}
+
+        La nouvelle activité doit être de type "${sessionType}". Elle doit être une alternative pertinente mais différente de l'originale.
+        Assure-toi que la nouvelle suggestion est sûre et adaptée au profil de l'utilisateur.
+        Ne fournis qu'une seule suggestion d'activité, en respectant scrupuleusement le format JSON demandé.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: singleActivitySchema,
+            },
+        });
+
+        const jsonText = response.text.trim();
+        return JSON.parse(jsonText) as Omit<Activity, 'id'>;
+
+    } catch (error) {
+        console.error("Error calling Gemini API for replacement activity:", error);
+        throw new Error("Failed to generate replacement activity from Gemini API.");
+    }
 };

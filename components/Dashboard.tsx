@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { UserProfile, WeeklyProgram, HistoryItem } from '../types';
+import { UserProfile, WeeklyProgram, HistoryItem, Activity } from '../types';
 import Header from './ui/Header';
 import DashboardHome from './dashboard/DashboardHome';
 import ProgramView from './program/ProgramView';
@@ -14,25 +13,26 @@ interface DashboardProps {
   history: HistoryItem[];
   onSessionComplete: (sessionTitle: string) => void;
   onReset: () => void;
+  onUpdateActivity: (day: string, activityId: string, newActivity: Activity) => void;
 }
 
 type View = 'dashboard' | 'program' | 'history' | 'profile';
 
-const Dashboard: React.FC<DashboardProps> = ({ profile, program, history, onSessionComplete, onReset }) => {
+const Dashboard: React.FC<DashboardProps> = ({ profile, program, history, onSessionComplete, onReset, onUpdateActivity }) => {
   const [currentView, setCurrentView] = useState<View>('dashboard');
 
   const renderView = () => {
     switch (currentView) {
       case 'dashboard':
-        return <DashboardHome profile={profile} program={program} onSessionComplete={onSessionComplete} history={history} />;
+        return <DashboardHome profile={profile} program={program} onSessionComplete={onSessionComplete} history={history} onUpdateActivity={onUpdateActivity} />;
       case 'program':
-        return <ProgramView program={program} onSessionComplete={onSessionComplete} history={history} />;
+        return <ProgramView program={program} onSessionComplete={onSessionComplete} history={history} profile={profile} onUpdateActivity={onUpdateActivity} />;
       case 'history':
         return <HistoryView history={history} />;
       case 'profile':
         return <ProfileView profile={profile} onReset={onReset} />;
       default:
-        return <DashboardHome profile={profile} program={program} onSessionComplete={onSessionComplete} history={history} />;
+        return <DashboardHome profile={profile} program={program} onSessionComplete={onSessionComplete} history={history} onUpdateActivity={onUpdateActivity} />;
     }
   };
   

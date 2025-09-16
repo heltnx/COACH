@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { WeeklyProgram, Session, HistoryItem } from '../../types';
+import { WeeklyProgram, Session, HistoryItem, UserProfile, Activity } from '../../types';
 import Card from '../ui/Card';
 import { DumbbellIcon, PuzzleIcon } from '../ui/Icons';
 import SessionDetail from './SessionDetail';
@@ -8,15 +7,25 @@ import SessionDetail from './SessionDetail';
 interface ProgramViewProps {
   program: WeeklyProgram;
   history: HistoryItem[];
+  profile: UserProfile;
   onSessionComplete: (sessionTitle: string) => void;
+  onUpdateActivity: (day: string, activityId: string, newActivity: Activity) => void;
 }
 
-const ProgramView: React.FC<ProgramViewProps> = ({ program, history, onSessionComplete }) => {
-  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+const ProgramView: React.FC<ProgramViewProps> = ({ program, history, profile, onSessionComplete, onUpdateActivity }) => {
+  const [selectedSession, setSelectedSession] = useState<{session: Session, day: string} | null>(null);
 
   if (selectedSession) {
-    const isCompleted = history.some(item => item.sessionTitle === selectedSession.title);
-    return <SessionDetail session={selectedSession} onBack={() => setSelectedSession(null)} onComplete={onSessionComplete} isCompleted={isCompleted} />;
+    const isCompleted = history.some(item => item.sessionTitle === selectedSession.session.title);
+    return <SessionDetail 
+                session={selectedSession.session} 
+                day={selectedSession.day}
+                profile={profile}
+                onBack={() => setSelectedSession(null)} 
+                onComplete={onSessionComplete} 
+                isCompleted={isCompleted} 
+                onUpdateActivity={onUpdateActivity}
+            />;
   }
 
   return (
@@ -40,7 +49,7 @@ const ProgramView: React.FC<ProgramViewProps> = ({ program, history, onSessionCo
                                     <h3 className="text-xl font-semibold text-brand-text">{session.title}</h3>
                                 </div>
                                 <p className="text-brand-light-text mb-4 ml-10">{session.description}</p>
-                                <button onClick={() => setSelectedSession(session)} className="w-full md:w-auto ml-10 bg-white border border-brand-primary text-brand-primary font-semibold py-2 px-5 rounded-lg hover:bg-teal-50 transition duration-300">
+                                <button onClick={() => setSelectedSession({session, day})} className="w-full md:w-auto ml-10 bg-white border border-brand-primary text-brand-primary font-semibold py-2 px-5 rounded-lg hover:bg-teal-50 transition duration-300">
                                     Voir la séance
                                 </button>
                             </div>
